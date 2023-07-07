@@ -287,13 +287,13 @@ class BaseTablet(base.UHIDTestDevice):
         ToolID.fill(toolid, report)
 
         if valid is not None:
-            #report.wacomvalid = valid
+            #report.wacomreportvalid = valid
             setattr(report, "0xff0d01d0", valid)
         elif type(x) is list:
-            #report.wacomvalid = [ True for _ in x ]
+            #report.wacomreportvalid = [ True for _ in x ]
             setattr(report, "0xff0d01d0", [ True for _ in x ])
         else:
-            #report.wacomvalid = True
+            #report.wacomreportvalid = True
             setattr(report, "0xff0d01d0", True)
 
         return report
@@ -596,7 +596,7 @@ class OpaqueBatchedTablet(BaseTablet):
         0x05, 0x0D,                     # .     Usage Page (Digitizer),
         0x09, 0x20,                     # .     Usage (Stylus),
         0xA1, 0x00,                     # .     Collection (Physical),
-        0x0b, 0xD0, 0x01, 0x0D, 0xFF,   # .         Usage (Wacom Valid),
+        0x0b, 0xD0, 0x01, 0x0D, 0xFF,   # .         Usage (Wacom Report Valid),
         0x09, 0x42,                     # .         Usage (Tip Switch),
         0x09, 0x32,                     # .         Usage (In Range),
         0x65, 0x00,                     # .         Unit,
