@@ -581,6 +581,70 @@ class PTHX60_Pen(BaseTablet):
         self.default_reportID = 16
 
 
+class OpaqueBatchedTablet(BaseTablet):
+    """
+    Generic device which sends a batch of several pen events in a single
+    report.
+
+    This is similar to e.g. the Bluetooth interface of the PTH-460,
+    CTL-4100WL, or CTL-6100WL. The driver needs to send all of the
+    contained events in the proper order with reasonable timestamps.
+    """
+
+    # fmt: off
+    _pen_physical = [
+        0x05, 0x0D,                     # .     Usage Page (Digitizer),
+        0x09, 0x20,                     # .     Usage (Stylus),
+        0xA1, 0x00,                     # .     Collection (Physical),
+        0x0b, 0xD0, 0x01, 0x0D, 0xFF,   # .         Usage (Wacom Valid),
+        0x09, 0x42,                     # .         Usage (Tip Switch),
+        0x09, 0x32,                     # .         Usage (In Range),
+        0x65, 0x00,                     # .         Unit,
+        0x55, 0x00,                     # .         Unit Exponent (0),
+        0x35, 0x00,                     # .         Physical Minimum (0),
+        0x45, 0x00,                     # .         Physical Maximum (0),
+        0x15, 0x00,                     # .         Logical Minimum (0),
+        0x25, 0x01,                     # .         Logical Maximum (1),
+        0x75, 0x01,                     # .         Report Size (1),
+        0x95, 0x03,                     # .         Report Count (3),
+        0x81, 0x02,                     # .         Input (Variable),
+        0x95, 0x05,                     # .         Report Count (5),
+        0x81, 0x03,                     # .         Input (Constant, Variable),
+        0x05, 0x01,                     # .         Usage Page (Desktop),
+        0x09, 0x30,                     # .         Usage (X),
+        0x27, 0x80, 0x3E, 0x00, 0x00,   # .         Logical Maximum (16000),
+        0x47, 0x80, 0x3E, 0x00, 0x00,   # .         Physical Maximum (16000),
+        0x65, 0x11,                     # .         Unit (Centimeter),
+        0x55, 0x0D,                     # .         Unit Exponent (13),
+        0x75, 0x10,                     # .         Report Size (16),
+        0x95, 0x01,                     # .         Report Count (1),
+        0x81, 0x02,                     # .         Input (Variable),
+        0x09, 0x31,                     # .         Usage (Y),
+        0x27, 0x28, 0x23, 0x00, 0x00,   # .         Logical Maximum (9000),
+        0x47, 0x28, 0x23, 0x00, 0x00,   # .         Physical Maximum (9000),
+        0x81, 0x02,                     # .         Input (Variable),
+        0xC0,                           # .     End Collection,
+    ]
+    # fmt: on
+
+    # fmt: off
+    report_descriptor = [
+        0x05, 0x0D,                     # . Usage Page (Digitizer),
+        0x09, 0x01,                     # . Usage (Digitizer),
+        0xA1, 0x01,                     # . Collection (Application),
+        0x85, 0x01,                     # .     Report ID (1),
+        *_pen_physical,
+        *_pen_physical,
+        *_pen_physical,
+        0xC0,                           # . End Collection,
+    ]
+    # fmt: on
+
+    def __init__(self, rdesc=report_descriptor, name=None, info=(0x3, 0x056A, 0x9999)):
+        super().__init__(rdesc, name, info)
+        self.default_reportID = 1
+
+
 class BaseTest:
     class TestTablet(base.BaseTestCase.TestUhid):
         kernel_modules = [KERNEL_MODULE]
@@ -780,6 +844,45 @@ class TestOpaqueTablet(PenTabletTest):
             uhdev.event(130, 240, pressure=0), [], auto_syn=False, strict=True
         )
 
+
+class TestBatchedTablet(TestOpaqueTablet):
+    def create_device(self):
+        return OpaqueBatchedTablet()
+
+    def test_batch_sanity(self):
+        """
+        Same test as test_sanity, but with batches if supported.
+        """
+        uhdev = self.uhdev
+
+        btns_clear = Buttons.clear()
+        tool1 = ToolID(serial=1, tooltype=1)
+        self.sync_and_assert_events(
+            uhdev.event(
+                [100, 110, 120],
+                [200, 220, 230],
+                pressure=[300, 0, 0],
+                buttons=[btns_clear, btns_clear, btns_clear],
+                toolid=[tool1, tool1, ToolID.clear()],
+                proximity=[ProximityState.IN_RANGE, ProximityState.IN_RANGE, ProximityState.OUT],
+            ),
+            [
+                libevdev.InputEvent(libevdev.EV_KEY.BTN_TOOL_PEN, 1),
+                libevdev.InputEvent(libevdev.EV_ABS.ABS_X, 100),
+                libevdev.InputEvent(libevdev.EV_ABS.ABS_Y, 200),
+                libevdev.InputEvent(libevdev.EV_KEY.BTN_TOUCH, 1),
+                libevdev.InputEvent(libevdev.EV_SYN.SYN_REPORT, 0),
+
+                libevdev.InputEvent(libevdev.EV_ABS.ABS_X, 110),
+                libevdev.InputEvent(libevdev.EV_ABS.ABS_Y, 220),
+                libevdev.InputEvent(libevdev.EV_KEY.BTN_TOUCH, 0),
+                libevdev.InputEvent(libevdev.EV_SYN.SYN_REPORT, 0),
+
+                libevdev.InputEvent(libevdev.EV_KEY.BTN_TOOL_PEN, 0),
+                libevdev.InputEvent(libevdev.EV_SYN.SYN_REPORT, 0),
+            ],
+            auto_syn=False,
+        )
 
 class TestOpaqueCTLTablet(TestOpaqueTablet):
     def create_device(self):
