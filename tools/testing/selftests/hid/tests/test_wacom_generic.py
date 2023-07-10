@@ -42,6 +42,53 @@ logger = logging.getLogger("hidtools.test.wacom")
 KERNEL_MODULE = ("wacom", "wacom")
 
 
+def pivot_ld_to_dl(ld):
+    """
+    Pivot data from a list of dictionaries into a dictionary of lists.
+
+    This function expects all dictionaries to share the same set of keys.
+    """
+    return { k: [ d[k] for d in ld ] for k in ld[0] }
+
+
+def fill_attrs(object, fn, items):
+    """
+    Compute and fill in attributes of an object.
+
+    For each item, use fn to compute the attributes which it would set on
+    the given object. Merge the results so that we have a list of values
+    associated with each attribute. Set each attribute on the object, either
+    to a list if required or a plain value if possible.
+
+    :param object: Object to set the attributes on
+    :param fn: Function taking a single item and returning a dictionary of
+        attributes that should be set given that item.
+    :param items: A single item or list of items that should have attributes
+        computed.
+
+    Examples:
+    ~~~
+    def fn(x): return { 'a': True if x%2 == 0 else False, 'b': is_prime(x) }
+    items = [1, 2, 3, 4, 5, 6]
+    fill_attrs(obj, fn, items)
+    obj.a == [False, True, False, True, False, True]
+    obj.b == [False, True, True, False, True, False]
+
+
+    def fn(x): return { 'a': True if x%2 == 0 else False, 'b': is_prime(x) }
+    items = 7
+    fill_attrs(obj, fn, items)
+    obj.a = False
+    obj.b = True
+    ~~~
+    """
+    if not type(items) is list:
+        items = [ items ]
+    attrs_list = [ fn(item) for item in items ]
+    for k, v in pivot_ld_to_dl(attrs_list).items():
+        setattr(object, k, v[0] if len(items) == 1 else v)
+
+
 class ProximityState(Enum):
     """
     Enumeration of allowed proximity states.
@@ -58,13 +105,15 @@ class ProximityState(Enum):
     # valid.
     IN_RANGE = 2
 
-    def fill(self, reportdata):
+    @staticmethod
+    def fill(state, reportdata):
         """Fill a report with approrpiate HID properties/values."""
-        reportdata.inrange = self in [ProximityState.IN_RANGE]
-        reportdata.wacomsense = self in [
-            ProximityState.IN_PROXIMITY,
-            ProximityState.IN_RANGE,
-        ]
+        def attrs(s):
+            return {
+                'inrange': s in [ProximityState.IN_RANGE],
+                'wacomsense': s in [ProximityState.IN_PROXIMITY, ProximityState.IN_RANGE],
+            }
+        fill_attrs(reportdata, attrs, state)
 
 
 class ReportData:
@@ -94,11 +143,16 @@ class Buttons:
         """Button object with all states cleared."""
         return Buttons(False, False, False)
 
-    def fill(self, reportdata):
+    @staticmethod
+    def fill(buttons, reportdata):
         """Fill a report with approrpiate HID properties/values."""
-        reportdata.barrelswitch = int(self.primary or 0)
-        reportdata.secondarybarrelswitch = int(self.secondary or 0)
-        reportdata.b3 = int(self.tertiary or 0)
+        def attrs(b):
+            return {
+                'barrelswitch': int(b.primary or 0),
+                'secondarybarrelswitch': int(b.secondary or 0),
+                'b3': int(b.tertiary or 0),
+            }
+        fill_attrs(reportdata, attrs, buttons)
 
 
 @attr.s
@@ -119,11 +173,16 @@ class ToolID:
         """ToolID object with all fields cleared."""
         return ToolID(0, 0)
 
-    def fill(self, reportdata):
+    @staticmethod
+    def fill(tool, reportdata):
         """Fill a report with approrpiate HID properties/values."""
-        reportdata.transducerserialnumber = self.serial & 0xFFFFFFFF
-        reportdata.serialhi = (self.serial >> 32) & 0xFFFFFFFF
-        reportdata.tooltype = self.tooltype
+        def attrs(t):
+            return {
+                'transducerserialnumber': t.serial & 0xFFFFFFFF,
+                'serialhi': (t.serial >> 32) & 0xFFFFFFFF,
+                'tooltype': t.tooltype,
+            }
+        fill_attrs(reportdata, attrs, tool)
 
 
 @attr.s
@@ -187,11 +246,11 @@ class BaseTablet(base.UHIDTestDevice):
         else:
             return True
 
-    def create_report(
-        self, x, y, pressure, buttons=None, toolid=None, proximity=None, reportID=None
+    def create_report_object(
+        self, x, y, pressure, buttons=None, toolid=None, proximity=None, valid=None
     ):
         """
-        Return an input report for this device.
+        Return an input report object for this device.
 
         :param x: absolute x
         :param y: absolute y
@@ -215,18 +274,63 @@ class BaseTablet(base.UHIDTestDevice):
             self.proximity = proximity
         proximity = self.proximity
 
-        reportID = reportID or self.default_reportID
-
         report = ReportData()
         report.x = x
         report.y = y
         report.tippressure = pressure
-        report.tipswitch = pressure > 0
-        buttons.fill(report)
-        proximity.fill(report)
-        toolid.fill(report)
+        if type(pressure) is list:
+            report.tipswitch = [p > 0 for p in pressure]
+        else:
+            report.tipswitch = pressure > 0
+        Buttons.fill(buttons, report)
+        ProximityState.fill(proximity, report)
+        ToolID.fill(toolid, report)
 
-        return super().create_report(report, reportID=reportID)
+        if valid is not None:
+            #report.wacomvalid = valid
+            setattr(report, "0xff0d01d0", valid)
+        elif type(x) is list:
+            #report.wacomvalid = [ True for _ in x ]
+            setattr(report, "0xff0d01d0", [ True for _ in x ])
+        else:
+            #report.wacomvalid = True
+            setattr(report, "0xff0d01d0", True)
+
+        return report
+
+    def create_report(
+        self, x, y, pressure, buttons=None, toolid=None, proximity=None, valid=None, reportID=None
+    ):
+        """
+        Return an input report for this device.
+
+        :param x: absolute x
+        :param y: absolute y
+        :param pressure: pressure
+        :param buttons: stylus button state. Use ``None`` for unchanged.
+        :param toolid: tool identifiers. Use ``None`` for unchanged.
+        :param proximity: a ProximityState indicating the sensor's ability
+             to detect and report attributes of this tool. Use ``None``
+             for unchanged.
+        :param reportID: the numeric report ID for this report, if needed
+        """
+        reportID = reportID or self.default_reportID
+        if type(x) is list:
+            objs = []
+            for i in range(0, len(x)):
+                obj = self.create_report_object(
+                    x[i] if x is not None else None,
+                    y[i] if y is not None else None,
+                    pressure[i] if pressure is not None else None,
+                    buttons[i] if buttons is not None else None,
+                    toolid[i] if toolid is not None else None,
+                    proximity[i] if proximity is not None else None,
+                    valid[i] if valid is not None else None)
+                objs.append(obj)
+            return super().create_report(objs, reportID=reportID)
+        else:
+            obj = self.create_report_object(x, y, pressure, buttons, toolid, proximity, valid)
+            return super().create_report(obj, reportID=reportID)
 
     def create_report_heartbeat(self, reportID):
         """
