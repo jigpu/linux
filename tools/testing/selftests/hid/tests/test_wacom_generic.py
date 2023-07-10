@@ -35,6 +35,7 @@ from . import base
 from . import test_multitouch
 import libevdev
 import pytest
+import time
 
 import logging
 
@@ -767,6 +768,21 @@ class IntuosBluetoothIshTablet(BaseTablet):
 class BaseTest:
     class TestTablet(base.BaseTestCase.TestUhid):
         kernel_modules = [KERNEL_MODULE]
+        sync_time = None
+
+        def set_sync_time_from_event(self, ev=None):
+            self.sync_time = ev.sec + ev.usec / 1_000_000
+
+        def sync_and_return_events(self, report):
+            """
+            Inject a HID report into the kernel, returning the generated
+            input events.
+            """
+            uhdev = self.uhdev
+            syn_event = self.syn_event
+            actual_events = uhdev.next_sync_events()
+            self.debug_reports(report, uhdev, actual_events)
+            return actual_events
 
         def sync_and_assert_events(
             self, report, expected_events, auto_syn=True, strict=False
@@ -774,16 +790,46 @@ class BaseTest:
             """
             Assert we see the expected events in response to a report.
             """
-            uhdev = self.uhdev
             syn_event = self.syn_event
             if auto_syn:
                 expected_events.append(syn_event)
-            actual_events = uhdev.next_sync_events()
-            self.debug_reports(report, uhdev, actual_events)
+            actual_events = self.sync_and_return_events(report)
             if strict:
                 self.assertInputEvents(expected_events, actual_events)
             else:
                 self.assertInputEventsIn(expected_events, actual_events)
+
+        def assert_timestamps(
+            self, actual_events, maximum_delta
+        ):
+            """
+            Assert we see the expected progression of timestamps.
+
+            Note that you will need to sleep between invocations of
+            uhdev.event if you want the timestamps to have a particular
+            spacing.
+            """
+            def list_split_after(l, match):
+                outer = []
+                inner = []
+                for item in l:
+                    inner.append(item)
+                    if match(item):
+                        outer.append(inner)
+                        inner = []
+                if len(inner) != 0:
+                    outer.append(inner)
+                return outer
+            # Split into sync-separated blocks to handle devices that
+            # send multiple hardware events in a single report.
+            blocks = list_split_after(actual_events, lambda x: x.matches(libevdev.EV_SYN.SYN_REPORT))
+            for block in blocks:
+                if self.sync_time is not None:
+                    range_min = self.sync_time
+                    range_max = self.sync_time + maximum_delta
+                    self.assertTimestampsInRange(block, range_min, range_max)
+                if block[-1].matches(libevdev.EV_SYN.SYN_REPORT):
+                    self.set_sync_time_from_event(block[-1])
 
         def get_usages(self, uhdev):
             def get_report_usages(report):
@@ -1022,6 +1068,113 @@ class TestIntuosBluetoothIshTablet(TestBatchedTablet):
 
     def test_sanity(self):
         self.do_test_sanity(strictEmpty=False)
+
+    def test_timestamp_single(self):
+        """
+        Verify that the kernel correctly timestamps events sent serialy.
+
+        This test sends a single event per report, sleeping for a small
+        interval between each report. Check that the events we read back
+        don't have bogus timestamps.
+        events we get back.
+        """
+        uhdev = self.uhdev
+        self.sync_time = None
+        report_interval = 0.015
+        maximum_delta = 1.000
+
+        event = uhdev.event(
+            100,
+            200,
+            pressure=0,
+            buttons=Buttons.clear(),
+            toolid=ToolID(serial=1, tooltype=1),
+            proximity=ProximityState.IN_RANGE,
+        )
+        actual_events = self.sync_and_return_events(event)
+        self.assert_timestamps(
+            actual_events,
+            maximum_delta
+        )
+
+        time.sleep(report_interval)
+
+        event = uhdev.event(110, 220, pressure=0)
+        actual_events = self.sync_and_return_events(event)
+        self.assert_timestamps(
+            actual_events,
+            maximum_delta,
+        )
+
+        time.sleep(report_interval)
+
+        event = uhdev.event(
+            110,
+            220,
+            pressure=0,
+            toolid=ToolID.clear(),
+            proximity=ProximityState.OUT,
+        )
+        actual_events = self.sync_and_return_events(event)
+        self.assert_timestamps(
+            actual_events,
+            maximum_delta
+        )
+
+    def test_timestamp_batch(self):
+        """
+        Verify that the kernel correctly timestamps evens sent in batches.
+
+        This test sends a a batch of several events per report, sleeping
+        for a small interval between each report. Verify that the events
+        we receive back are approximately evenly spaced across the sleep
+        interval.
+        """
+        uhdev = self.uhdev
+        self.sync_time = None
+        report_interval = 0.015
+        maximum_delta = 1.000
+
+        btns_clear = Buttons.clear()
+        tool1 = ToolID(serial=1, tooltype=1)
+
+        event = uhdev.event(
+            [100, 110, 120],
+            [200, 210, 220],
+            pressure=[0, 0, 0],
+            buttons=[btns_clear, btns_clear, btns_clear],
+            toolid=[tool1, tool1, tool1],
+            proximity=[ProximityState.IN_RANGE, ProximityState.IN_RANGE, ProximityState.IN_RANGE],
+        )
+        actual_events = self.sync_and_return_events(event)
+        # Note: for the first prox-in, if multiple events are contained
+        # in a single report, the driver's `wacom_intuos_pro2_bt_pen`
+        # function will assume they should be spread over a 15ms time
+        # interval.
+        self.assert_timestamps(
+            actual_events,
+            maximum_delta
+        )
+
+        # Now that we're past the first report, the driver should spread
+        # all events evenly across the time that elapsed since receiving
+        # the previous report.
+        time.sleep(report_interval)
+
+        event = uhdev.event(
+            [130, 140, 150],
+            [230, 240, 240],
+            pressure=[0, 0, 0],
+            buttons=[btns_clear, btns_clear, btns_clear],
+            toolid=[tool1, tool1, tool1],
+            proximity=[ProximityState.IN_RANGE, ProximityState.IN_RANGE, ProximityState.OUT],
+        )
+        actual_events = self.sync_and_return_events(event)
+        self.assert_timestamps(
+            actual_events,
+            maximum_delta
+        )
+
 
 class TestOpaqueCTLTablet(TestOpaqueTablet):
     def create_device(self):

@@ -168,6 +168,13 @@ class BaseTestCase:
             remaining = self.assertInputEventsIn(expected_events, effective_events)
             assert remaining == []
 
+        def assertTimestampsInRange(self, effective_events, min, max):
+            for ev in effective_events:
+                t = ev.sec + ev.usec / 1_000_000
+                assert t > 0
+                assert t >= min
+                assert t <= max
+
         @classmethod
         def debug_reports(cls, reports, uhdev=None, events=None):
             data = [" ".join([f"{v:02x}" for v in r]) for r in reports]
