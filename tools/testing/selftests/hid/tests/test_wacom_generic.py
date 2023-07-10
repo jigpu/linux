@@ -645,6 +645,114 @@ class OpaqueBatchedTablet(BaseTablet):
         self.default_reportID = 1
 
 
+class IntuosBluetoothIshTablet(BaseTablet):
+    """
+    Device with a report similar to what is sent by the Bluetooth
+    interface of Intuos CTL-4100.
+
+    The actual device does not have a useful HID descriptor for our
+    purposes, so this class imagines what one might look like. It
+    allows us to verify how the various hardcoded IRQ functions
+    respond to events.
+    """
+
+    # fmt: off
+    _pen_physical = [
+        0x06, 0x0D, 0xFF,               # . Usage Page (Vnd Wacom Emr),
+        0x09, 0x20,                     # .     Usage (Stylus),
+        0xA1, 0x00,                     # .     Collection (Physical),
+        0x09, 0x42,                     # .         Usage (Tip Switch),
+        0x09, 0x44,                     # .         Usage (Barrel Switch),
+        0x09, 0x5A,                     # .         Usage (Secondary Barrel Switch),
+        0x09, 0x45,                     # .         Usage (Eraser),
+        0x09, 0x3C,                     # .         Usage (Invert),
+        0x09, 0x32,                     # .         Usage (In Range),
+        0x09, 0x36,                     # .         Usage (In Proximity),
+        0x0A, 0xD0, 0x01,               # .         Usage (Wacom Report Valid),
+        0x65, 0x00,                     # .         Unit,
+        0x55, 0x00,                     # .         Unit Exponent (0),
+        0x35, 0x00,                     # .         Physical Minimum (0),
+        0x45, 0x00,                     # .         Physical Maximum (0),
+        0x15, 0x00,                     # .         Logical Minimum (0),
+        0x25, 0x01,                     # .         Logical Maximum (1),
+        0x75, 0x01,                     # .         Report Size (1),
+        0x95, 0x08,                     # .         Report Count (8),
+        0x81, 0x02,                     # .         Input (Variable),
+        0x05, 0x01,                     # .         Usage Page (Desktop),
+        0x09, 0x30,                # .         Usage (X),
+        0x27, 0x60, 0x3B, 0x00, 0x00,   # .         Logical Maximum (15200),
+        0x47, 0x60, 0x3B, 0x00, 0x00,   # .         Physical Maximum (15200),
+        0x65, 0x11,                     # .         Unit (Centimeter),
+        0x55, 0x0D,                     # .         Unit Exponent (13),
+        0x75, 0x10,                     # .         Report Size (16),
+        0x95, 0x01,                     # .         Report Count (1),
+        0x81, 0x02,                     # .         Input (Variable),
+        0x09, 0x31,               # .         Usage (Y),
+        0x27, 0x1C, 0x25, 0x00, 0x00,   # .         Logical Maximum (9500),
+        0x47, 0x1C, 0x25, 0x00, 0x00,   # .         Physical Maximum (9500),
+        0x81, 0x02,                     # .         Input (Variable),
+        0x06, 0x0D, 0xFF,               # . Usage Page (Vnd Wacom Emr),
+        0x09, 0x30,                     # .         Usage (Tip Pressure),
+        0x55, 0x00,                     # .         Unit Exponent (0),
+        0x65, 0x00,                     # .         Unit,
+        0x47, 0x00, 0x00, 0x00, 0x00,   # .         Physical Maximum (0),
+        0x26, 0xFF, 0x0F,               # .         Logical Maximum (4095),
+        0x75, 0x10,                     # .         Report Size (16),
+        0x81, 0x02,                     # .         Input (Variable),
+        0x0A, 0x32, 0x01,               # .         Usage (Z),
+        0x25, 0x3F,                     # .         Logical Maximum (63),
+        0x75, 0x08,                     # .         Report Size (8),
+        0x95, 0x01,                     # .         Report Count (1),
+        0x81, 0x02,                     # .         Input (Variable),
+        0xC0,                           # .     End Collection,
+    ]
+    # fmt: on
+
+    # fmt: off
+    report_descriptor = [
+        0x06, 0x0D, 0xFF,               # . Usage Page (Vnd Wacom Emr),
+        0x09, 0x01,                     # . Usage (Digitizer),
+        0xA1, 0x01,                     # . Collection (Application),
+        0x85, 0x81,                     # .     Report ID (129),
+        *_pen_physical,
+        *_pen_physical,
+        *_pen_physical,
+        *_pen_physical,
+        0x09, 0x5B,                     # .         Usage (Transducer Serial Number),
+        0x09, 0x5C,                     # .         Usage (Transducer Serial Number Hi),
+        0x65, 0x00,                     # .         Unit,
+        0x55, 0x00,                     # .         Unit Exponent (0),
+        0x35, 0x00,                     # .         Physical Minimum (0),
+        0x45, 0x00,                     # .         Physical Maximum (0),
+        0x17, 0x00, 0x00, 0x00, 0x80,   # .         Logical Minimum (-2147483648),
+        0x27, 0xFF, 0xFF, 0xFF, 0x7F,   # .         Logical Maximum (2147483647),
+        0x75, 0x20,                     # .         Report Size (32),
+        0x95, 0x02,                     # .         Report Count (2),
+        0x81, 0x02,                     # .         Input (Variable),
+        0x09, 0x77,                     # .         Usage (Tool Type),
+        0x15, 0x00,                     # .         Logical Minimum (0),
+        0x26, 0xFF, 0x0F,               # .         Logical Maximum (4095),
+        0x75, 0x10,                     # .         Report Size (16),
+        0x95, 0x01,                     # .         Report Count (1),
+        0x81, 0x02,                     # .         Input (Variable),
+
+        # TODO: Fill in with ExpressKey and battery status
+        0x75, 0x08,                     # .         Report Size (8),
+        0x95, 0x03,                     # .         Report Count (3),
+        0x81, 0x03,                     # .         Input (Constant, Variable),
+
+        0x75, 0x08,                     # .         Report Size (8),
+        0x95, 0x05,                     # .         Report Count (5),
+        0x81, 0x03,                     # .         Input (Constant, Variable),
+        0xC0,                           # . End Collection,
+    ]
+    # fmt: on
+
+    def __init__(self, rdesc=report_descriptor, name=None, info=(0x5, 0x056A, 0x0377)):
+        super().__init__(rdesc, name, info)
+        self.default_reportID = 0x81
+
+
 class BaseTest:
     class TestTablet(base.BaseTestCase.TestUhid):
         kernel_modules = [KERNEL_MODULE]
@@ -792,7 +900,7 @@ class TestOpaqueTablet(PenTabletTest):
     def create_device(self):
         return OpaqueTablet()
 
-    def test_sanity(self):
+    def do_test_sanity(self, strictEmpty=True):
         """
         Bring a pen into contact with the tablet, then remove it.
 
@@ -841,8 +949,11 @@ class TestOpaqueTablet(PenTabletTest):
         )
 
         self.sync_and_assert_events(
-            uhdev.event(130, 240, pressure=0), [], auto_syn=False, strict=True
+            uhdev.event(130, 240, pressure=0), [], auto_syn=False, strict=strictEmpty
         )
+
+    def test_sanity(self):
+        self.do_test_sanity()
 
 
 class TestBatchedTablet(TestOpaqueTablet):
@@ -883,6 +994,26 @@ class TestBatchedTablet(TestOpaqueTablet):
             ],
             auto_syn=False,
         )
+
+
+class TestIntuosBluetoothIshTablet(TestBatchedTablet):
+    def create_device(self):
+        return IntuosBluetoothIshTablet()
+
+    def assertName(self, uhdev):
+            """
+            Assert that the name is as we expect.
+
+            The Wacom driver applies a number of decorations to the name
+            provided by the hardware. We cannot rely on the definition of
+            this assertion from the base class to work properly.
+            """
+            evdev = uhdev.get_evdev()
+            expected_name = "Wacom Intuos BT S Pen"
+            assert evdev.name == expected_name
+
+    def test_sanity(self):
+        self.do_test_sanity(strictEmpty=False)
 
 class TestOpaqueCTLTablet(TestOpaqueTablet):
     def create_device(self):
