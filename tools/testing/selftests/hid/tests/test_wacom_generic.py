@@ -49,6 +49,7 @@ def pivot_ld_to_dl(ld):
 
     This function expects all dictionaries to share the same set of keys.
     """
+    assert all([ ld[0].keys() == k.keys() for k in ld ])
     return { k: [ d[k] for d in ld ] for k in ld[0] }
 
 
