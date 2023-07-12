@@ -1080,7 +1080,7 @@ class TestIntuosBluetoothIshTablet(TestBatchedTablet):
             uhdev.event(
                 100,
                 200,
-                pressure=300,
+                pressure=0,
                 buttons=Buttons.clear(),
                 toolid=ToolID(serial=1, tooltype=1),
                 proximity=ProximityState.IN_RANGE,
@@ -1097,8 +1097,8 @@ class TestIntuosBluetoothIshTablet(TestBatchedTablet):
         (dt, _) = self.time_fn_call(lambda: time.sleep(report_interval))
         self.sync_and_assert_timestamps(
             uhdev.event(
-                120,
-                230,
+                110,
+                220,
                 pressure=0,
                 toolid=ToolID.clear(),
                 proximity=ProximityState.OUT,
@@ -1131,7 +1131,7 @@ class TestIntuosBluetoothIshTablet(TestBatchedTablet):
             uhdev.event(
                 [100, 110, 120],
                 [200, 210, 220],
-                pressure=[300, 310, 320],
+                pressure=[0, 0, 0],
                 buttons=[btns_clear, btns_clear, btns_clear],
                 toolid=[tool1, tool1, tool1],
                 proximity=[ProximityState.IN_RANGE, ProximityState.IN_RANGE, ProximityState.IN_RANGE],
@@ -1146,9 +1146,9 @@ class TestIntuosBluetoothIshTablet(TestBatchedTablet):
         dt = (dt + interval_epsilon) / 3
         self.sync_and_assert_timestamps(
             uhdev.event(
-                [100, 110, 120],
-                [200, 210, 220],
-                pressure=[300, 310, 320],
+                [130, 140, 150],
+                [230, 240, 240],
+                pressure=[0, 0, 0],
                 buttons=[btns_clear, btns_clear, btns_clear],
                 toolid=[tool1, tool1, tool1],
                 proximity=[ProximityState.IN_RANGE, ProximityState.IN_RANGE, ProximityState.OUT],
