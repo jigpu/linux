@@ -771,8 +771,9 @@ class BaseTest:
             uhdev = self.uhdev
             syn_event = self.syn_event
             actual_events = uhdev.next_sync_events()
+            sync_time = time.monotonic()
             self.debug_reports(report, uhdev, actual_events)
-            return actual_events
+            return (actual_events, sync_time)
 
         def sync_and_assert_events(
             self, report, expected_events, auto_syn=True, strict=False
@@ -782,16 +783,11 @@ class BaseTest:
             """
             if auto_syn:
                 expected_events.append(syn_event)
-            actual_events = self.sync_and_return_events(report)
+            (actual_events, _) = self.sync_and_return_events(report)
             if strict:
                 self.assertInputEvents(expected_events, actual_events)
             else:
                 self.assertInputEventsIn(expected_events, actual_events)
-
-        def time_fn_call(self, fn):
-            start = time.monotonic()
-            result = fn()
-            return (time.monotonic() - start, result)
 
         def assert_timestamps(
             self, actual_events, timestamp_range
@@ -1076,50 +1072,49 @@ class TestIntuosBluetoothIshTablet(TestBatchedTablet):
         uhdev = self.uhdev
         self.sync_time = None
         report_interval = 0.015
-        interval_epsilon = 0.003
+        interval_epsilon = 0.002
 
-        (exec_time, actual_events) = self.time_fn_call(
-            lambda: self.sync_and_return_events(
-                uhdev.event(
-                    100,
-                    200,
-                    pressure=0,
-                    buttons=Buttons.clear(),
-                    toolid=ToolID(serial=1, tooltype=1),
-                    proximity=ProximityState.IN_RANGE,
-                )
+        (actual_events, sync_time) = self.sync_and_return_events(
+            uhdev.event(
+                100,
+                200,
+                pressure=0,
+                buttons=Buttons.clear(),
+                toolid=ToolID(serial=1, tooltype=1),
+                proximity=ProximityState.IN_RANGE,
             )
         )
+        last_sync_time = sync_time
         self.assert_timestamps(
             actual_events,
             timestamp_range=(0, 0)
         )
 
-        (sleep_time, _) = self.time_fn_call(lambda: time.sleep(report_interval))
-        (exec_time, actual_events) = self.time_fn_call(
-            lambda: self.sync_and_return_events(
-                uhdev.event(110, 220, pressure=0)
-            )
+        time.sleep(report_interval)
+
+        (actual_events, sync_time) = self.sync_and_return_events(
+            uhdev.event(110, 220, pressure=0)
         )
-        dt = sleep_time + exec_time
+        dt = sync_time - last_sync_time
+        last_sync_time = sync_time
         self.assert_timestamps(
             actual_events,
             timestamp_range=(dt - interval_epsilon, dt + interval_epsilon)
         )
 
-        (sleep_time, _) = self.time_fn_call(lambda: time.sleep(report_interval))
-        (exec_time, actual_events) = self.time_fn_call(
-            lambda: self.sync_and_return_events(
-                uhdev.event(
-                    110,
-                    220,
-                    pressure=0,
-                    toolid=ToolID.clear(),
-                    proximity=ProximityState.OUT,
-                )
+        time.sleep(report_interval)
+
+        (actual_events, sync_time) = self.sync_and_return_events(
+            uhdev.event(
+                110,
+                220,
+                pressure=0,
+                toolid=ToolID.clear(),
+                proximity=ProximityState.OUT,
             )
         )
-        dt = sleep_time + exec_time
+        dt = sync_time - last_sync_time
+        last_sync_time = sync_time
         self.assert_timestamps(
             actual_events,
             timestamp_range=(dt - interval_epsilon, dt + interval_epsilon)
@@ -1137,27 +1132,26 @@ class TestIntuosBluetoothIshTablet(TestBatchedTablet):
         uhdev = self.uhdev
         self.sync_time = None
         report_interval = 0.015
-        interval_epsilon = 0.003
+        interval_epsilon = 0.002
 
         btns_clear = Buttons.clear()
         tool1 = ToolID(serial=1, tooltype=1)
 
-        (exec_time, actual_events) = self.time_fn_call(
-            lambda: self.sync_and_return_events(
-                uhdev.event(
-                    [100, 110, 120],
-                    [200, 210, 220],
-                    pressure=[0, 0, 0],
-                    buttons=[btns_clear, btns_clear, btns_clear],
-                    toolid=[tool1, tool1, tool1],
-                    proximity=[ProximityState.IN_RANGE, ProximityState.IN_RANGE, ProximityState.IN_RANGE],
-                )
+        (actual_events, sync_time) = self.sync_and_return_events(
+            uhdev.event(
+                [100, 110, 120],
+                [200, 210, 220],
+                pressure=[0, 0, 0],
+                buttons=[btns_clear, btns_clear, btns_clear],
+                toolid=[tool1, tool1, tool1],
+                proximity=[ProximityState.IN_RANGE, ProximityState.IN_RANGE, ProximityState.IN_RANGE],
             )
         )
         # For the first prox-in, if multiple events are contained in a
         # single report, the driver's `wacom_intuos_pro2_bt_pen` function
         # will assume they should be spread over a 15ms time interval.
         dt = report_interval / 3
+        last_sync_time = sync_time
         self.assert_timestamps(
             actual_events,
             timestamp_range=(dt - interval_epsilon, dt + interval_epsilon)
@@ -1166,21 +1160,20 @@ class TestIntuosBluetoothIshTablet(TestBatchedTablet):
         # Now that we're past the first report, the driver should spread
         # all events evenly across the time that elapsed since receiving
         # the previous report.
-        (sleep_time, _) = self.time_fn_call(lambda: time.sleep(report_interval))
-        (exec_time, actual_events) = self.time_fn_call(
-            lambda: self.sync_and_return_events(
-                uhdev.event(
-                    [130, 140, 150],
-                    [230, 240, 240],
-                    pressure=[0, 0, 0],
-                    buttons=[btns_clear, btns_clear, btns_clear],
-                    toolid=[tool1, tool1, tool1],
-                    proximity=[ProximityState.IN_RANGE, ProximityState.IN_RANGE, ProximityState.OUT],
-                )
+        time.sleep(report_interval)
+
+        (actual_events, sync_time) = self.sync_and_return_events(
+            uhdev.event(
+                [130, 140, 150],
+                [230, 240, 240],
+                pressure=[0, 0, 0],
+                buttons=[btns_clear, btns_clear, btns_clear],
+                toolid=[tool1, tool1, tool1],
+                proximity=[ProximityState.IN_RANGE, ProximityState.IN_RANGE, ProximityState.OUT],
             )
         )
-        dt = (sleep_time + exec_time) / 3
-        print("dt = {}, sleep = {}, exec = {}".format(dt, sleep_time, exec_time))
+        dt = (sync_time - last_sync_time) / 3
+        last_sync_time = sync_time
         self.assert_timestamps(
             actual_events,
             timestamp_range=(dt - interval_epsilon, dt + interval_epsilon)
