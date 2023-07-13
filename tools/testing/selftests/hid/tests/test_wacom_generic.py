@@ -770,10 +770,11 @@ class BaseTest:
             """
             uhdev = self.uhdev
             syn_event = self.syn_event
+            before_sync = time.monotonic()
             actual_events = uhdev.next_sync_events()
-            sync_time = time.monotonic()
+            after_sync = time.monotonic()
             self.debug_reports(report, uhdev, actual_events)
-            return (actual_events, sync_time)
+            return (actual_events, (before_sync + after_sync) / 2)
 
         def sync_and_assert_events(
             self, report, expected_events, auto_syn=True, strict=False
