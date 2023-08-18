@@ -171,6 +171,7 @@ class BaseTestCase:
         def assertTimestampsInRange(self, effective_events, min, max):
             for ev in effective_events:
                 t = ev.sec + ev.usec / 1_000_000
+                print("Assert {} <= {} <= {}".format(min, t, max))
                 assert t > 0
                 assert t >= min
                 assert t <= max
