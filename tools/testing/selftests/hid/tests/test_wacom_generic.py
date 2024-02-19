@@ -381,6 +381,16 @@ class BaseTablet(base.UHIDTestDevice):
         self.call_input_event(r)
         return [r]
 
+    def event_batched(self, state_list):
+        """
+        Send a batched input event on the default report ID.
+
+        :param state_list: list of states for create_report_batched
+        """
+        r = self.create_report_batched(state_list)
+        self.call_input_event(r)
+        return [r]
+
     def event_heartbeat(self, reportID):
         """
         Send a heartbeat event on the requested report ID.
@@ -859,14 +869,11 @@ class TestBatchedTablet(TestOpaqueTablet):
         btns_clear = Buttons.clear()
         tool1 = ToolID(serial=1, tooltype=1)
         self.sync_and_assert_events(
-            uhdev.event(
-                [100, 110, 120],
-                [200, 220, 230],
-                pressure=[300, 0, 0],
-                buttons=[btns_clear, btns_clear, btns_clear],
-                toolid=[tool1, tool1, ToolID.clear()],
-                proximity=[ProximityState.IN_RANGE, ProximityState.IN_RANGE, ProximityState.OUT],
-            ),
+            uhdev.event_batched([
+                [100, 200, 300, btns_clear, tool1, ProximityState.IN_RANGE],
+                [110, 220, 0, btns_clear, tool1, ProximityState.IN_RANGE],
+                [120, 230, 0, btns_clear, ToolID.clear(), ProximityState.OUT]
+            ]),
             [
                 libevdev.InputEvent(libevdev.EV_KEY.BTN_TOOL_PEN, 1),
                 libevdev.InputEvent(libevdev.EV_ABS.ABS_X, 100),
