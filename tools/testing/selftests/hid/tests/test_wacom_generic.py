@@ -1138,14 +1138,11 @@ class TestIntuosBluetoothIshTablet(TestBatchedTablet):
         btns_clear = Buttons.clear()
         tool1 = ToolID(serial=1, tooltype=1)
 
-        event = uhdev.event(
-            [100, 110, 120],
-            [200, 210, 220],
-            pressure=[0, 0, 0],
-            buttons=[btns_clear, btns_clear, btns_clear],
-            toolid=[tool1, tool1, tool1],
-            proximity=[ProximityState.IN_RANGE, ProximityState.IN_RANGE, ProximityState.IN_RANGE],
-        )
+        event = uhdev.event_batched([
+            [100, 200, 0, btns_clear, tool1, ProximityState.IN_RANGE],
+            [110, 210, 0, btns_clear, tool1, ProximityState.IN_RANGE],
+            [120, 220, 0, btns_clear, tool1, ProximityState.IN_RANGE]
+        ])
         actual_events = self.sync_and_return_events(event)
         # Note: for the first prox-in, if multiple events are contained
         # in a single report, the driver's `wacom_intuos_pro2_bt_pen`
@@ -1161,14 +1158,11 @@ class TestIntuosBluetoothIshTablet(TestBatchedTablet):
         # the previous report.
         time.sleep(report_interval)
 
-        event = uhdev.event(
-            [130, 140, 150],
-            [230, 240, 240],
-            pressure=[0, 0, 0],
-            buttons=[btns_clear, btns_clear, btns_clear],
-            toolid=[tool1, tool1, tool1],
-            proximity=[ProximityState.IN_RANGE, ProximityState.IN_RANGE, ProximityState.OUT],
-        )
+        event = uhdev.event_batched([
+            [130, 230, 0, btns_clear, tool1, ProximityState.IN_RANGE],
+            [140, 240, 0, btns_clear, tool1, ProximityState.IN_RANGE],
+            [150, 250, 0, btns_clear, tool1, ProximityState.OUT]
+        ])
         actual_events = self.sync_and_return_events(event)
         self.assert_timestamps(
             actual_events,
