@@ -317,22 +317,21 @@ class BaseTablet(base.UHIDTestDevice):
         :param reportID: the numeric report ID for this report, if needed
         """
         reportID = reportID or self.default_reportID
-        if type(x) is list:
-            objs = []
-            for i in range(0, len(x)):
-                obj = self.create_report_object(
-                    x[i] if x is not None else None,
-                    y[i] if y is not None else None,
-                    pressure[i] if pressure is not None else None,
-                    buttons[i] if buttons is not None else None,
-                    toolid[i] if toolid is not None else None,
-                    proximity[i] if proximity is not None else None,
-                    valid[i] if valid is not None else None)
-                objs.append(obj)
-            return super().create_report(objs, reportID=reportID)
-        else:
-            obj = self.create_report_object(x, y, pressure, buttons, toolid, proximity, valid)
-            return super().create_report(obj, reportID=reportID)
+        obj = self.create_report_object(x, y, pressure, buttons, toolid, proximity, valid)
+        return super().create_report(obj, reportID=reportID)
+
+    def create_report_batched(
+        self, state_list, reportID=None
+    ):
+        """
+        Return an input report for this device from a batch of states.
+
+        :param state_list: list of states for each create_report_object call
+        :param reportID: the numeric report ID for this report, if needed
+        """
+        reportID = reportID or self.default_reportID
+        objs = [ self.create_report_object(*state) for state in state_list ]
+        return super().create_report(objs, reportID=reportID)
 
     def create_report_heartbeat(self, reportID):
         """
